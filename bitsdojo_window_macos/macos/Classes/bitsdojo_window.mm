@@ -14,7 +14,9 @@ void setAppWindow(NSWindow* value){
 
 NSWindow* getAppWindow(){
     if (NULL == _appWindow) {
-        _appWindow = [NSApp windows][0];
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            _appWindow = [NSApp windows][0];
+        });
     }
     return _appWindow;
 }
@@ -188,7 +190,13 @@ void setWindowTitle(NSWindow* window, const char* title){
 }
 
 double getTitleBarHeight(NSWindow* window){
-    double windowFrameHeight = window.contentView.frame.size.height;
-    double contentLayoutHeight = window.contentLayoutRect.size.height;
-    return windowFrameHeight - contentLayoutHeight;
+    __block double windowFrameHeight;
+    __block double contentLayoutHeight;
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        windowFrameHeight = window.contentView.frame.size.height;
+        contentLayoutHeight = window.contentLayoutRect.size.height;
+    });
+    double h = windowFrameHeight - contentLayoutHeight > 0 ? windowFrameHeight - contentLayoutHeight : 24;
+    return h;
 }

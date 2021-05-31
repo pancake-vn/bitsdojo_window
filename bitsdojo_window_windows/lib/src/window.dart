@@ -1,5 +1,5 @@
 import 'dart:ffi';
-import 'dart:ui';
+import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 
 import 'package:ffi/ffi.dart';
@@ -36,12 +36,13 @@ Rect getScreenRectForWindow(int handle) {
 }
 
 class WinWindow extends WinDesktopWindow {
+  static final dpiAware = native.isDPIAware();
   int? handle;
-  Size? _minSize;
-  Size? _maxSize;
+  ui.Size? _minSize;
+  ui.Size? _maxSize;
   // We use this for reporting size inside doWhenWindowReady
   // as GetWindowRect might not work reliably before window is shown on screen
-  Size? _sizeSetFromDart;
+  ui.Size? _sizeSetFromDart;
   Alignment? _alignment;
 
   void setWindowCutOnMaximize(int value) {
@@ -67,13 +68,13 @@ class WinWindow extends WinDesktopWindow {
         newRect.width.toInt(), newRect.height.toInt(), 0);
   }
 
-  Size get size {
+  ui.Size get size {
     final winRect = this.rect;
-    final gotSize = getLogicalSize(Size(winRect.width, winRect.height));
+    final gotSize = getLogicalSize(ui.Size(winRect.width, winRect.height));
     return gotSize;
   }
 
-  Size get sizeOnScreen {
+  ui.Size get sizeOnScreen {
     if (isInsideDoWhenWindowReady == true) {
       if (_sizeSetFromDart != null) {
         final sizeOnScreen = getSizeOnScreen(_sizeSetFromDart!);
@@ -81,12 +82,14 @@ class WinWindow extends WinDesktopWindow {
       }
     }
     final winRect = this.rect;
-    return Size(winRect.width, winRect.height);
+    return ui.Size(winRect.width, winRect.height);
   }
 
   double systemMetric(int metric, {int dpiToUse = 0}) {
     final windowDpi = dpiToUse != 0 ? dpiToUse : this.dpi;
-    double result = GetSystemMetricsForDpi(metric, windowDpi).toDouble();
+    double result = dpiAware
+      ? GetSystemMetricsForDpi(metric, windowDpi).toDouble()
+      : GetSystemMetrics(metric).toDouble();
     return result;
   }
 
@@ -95,7 +98,7 @@ class WinWindow extends WinDesktopWindow {
   }
 
   int get dpi {
-    if (!isValidHandle(handle, "get dpi")) return 96;
+    if (!dpiAware || !isValidHandle(handle, "get dpi")) return 96;
     return GetDpiForWindow(handle!);
   }
 
@@ -117,27 +120,27 @@ class WinWindow extends WinDesktopWindow {
     return result;
   }
 
-  Size get titleBarButtonSize {
+  ui.Size get titleBarButtonSize {
     double height = this.titleBarHeight - this.borderSize;
     double scaleFactor = this.scaleFactor;
     double cyCaption = systemMetric(SM_CYCAPTION);
     cyCaption /= scaleFactor;
     double width = cyCaption * 2;
-    return Size(width, height);
+    return ui.Size(width, height);
   }
 
-  Size getSizeOnScreen(Size inSize) {
+  ui.Size getSizeOnScreen(ui.Size inSize) {
     double scaleFactor = this.scaleFactor;
     double newWidth = inSize.width * scaleFactor;
     double newHeight = inSize.height * scaleFactor;
-    return Size(newWidth, newHeight);
+    return ui.Size(newWidth, newHeight);
   }
 
-  Size getLogicalSize(Size inSize) {
+  ui.Size getLogicalSize(ui.Size inSize) {
     double scaleFactor = this.scaleFactor;
     double newWidth = inSize.width / scaleFactor;
     double newHeight = inSize.height / scaleFactor;
-    return Size(newWidth, newHeight);
+    return ui.Size(newWidth, newHeight);
   }
 
   Alignment? get alignment => _alignment;
@@ -155,7 +158,7 @@ class WinWindow extends WinDesktopWindow {
     }
   }
 
-  set minSize(Size? newSize) {
+  set minSize(ui.Size? newSize) {
     _minSize = newSize;
     if (newSize == null) {
       //TODO - add handling for setting minSize to null
@@ -164,7 +167,7 @@ class WinWindow extends WinDesktopWindow {
     native.setMinSize(_minSize!.width.toInt(), _minSize!.height.toInt());
   }
 
-  set maxSize(Size? newSize) {
+  set maxSize(ui.Size? newSize) {
     _maxSize = newSize;
     if (newSize == null) {
       //TODO - add handling for setting maxSize to null
@@ -173,7 +176,7 @@ class WinWindow extends WinDesktopWindow {
     native.setMaxSize(_maxSize!.width.toInt(), _maxSize!.height.toInt());
   }
 
-  set size(Size newSize) {
+  set size(ui.Size newSize) {
     if (!isValidHandle(handle, "set size")) return;
 
     var width = newSize.width;
@@ -196,7 +199,7 @@ class WinWindow extends WinDesktopWindow {
       if (newSize.height > _maxSize!.height) height = _maxSize!.height;
     }
 
-    Size sizeToSet = Size(width, height);
+    ui.Size sizeToSet = ui.Size(width, height);
     _sizeSetFromDart = sizeToSet;
     if (_alignment == null) {
       SetWindowPos(handle!, 0, 0, 0, sizeToSet.width.toInt(),

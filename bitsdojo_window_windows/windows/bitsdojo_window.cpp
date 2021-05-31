@@ -10,6 +10,9 @@
 
 namespace bitsdojo_window {
 
+    UINT (*GetDpiForWindow) (HWND) = [] (HWND) { return 96u; };
+    int (*GetSystemMetricsForDpi) (int, UINT) = [] (int nIndex, UINT) { return GetSystemMetrics(nIndex); };
+
     HWND flutter_window = nullptr;
     HWND flutter_child_window = nullptr;
     HHOOK flutterWindowMonitor = nullptr;
@@ -23,6 +26,7 @@ namespace bitsdojo_window {
     BOOL window_can_be_shown = FALSE;
     BOOL restore_by_moving = FALSE;
     BOOL during_size_move = FALSE;
+    BOOL is_dpi_aware = FALSE;
     BOOL dpi_changed_during_size_move = FALSE;
     SIZE min_size = { 0, 0 };
     SIZE max_size = { 0, 0 };
@@ -35,13 +39,20 @@ namespace bitsdojo_window {
 
     auto bdw_init = init();
 
-    bool isBitsdojoWindowLoaded(){
+    bool isBitsdojoWindowLoaded() {
         return is_bitsdojo_window_loaded;
     }
 
-    int init()
-    {
+    int init() {
         is_bitsdojo_window_loaded = true;
+        if (auto user32 = LoadLibraryA("User32.dll")) {
+            if (auto fn = GetProcAddress(user32, "GetDpiForWindow"))
+            {
+                is_dpi_aware = true;
+                GetDpiForWindow = (decltype(GetDpiForWindow)) fn;
+                GetSystemMetricsForDpi = (decltype(GetSystemMetricsForDpi)) GetProcAddress(user32, "GetSystemMetricsForDpi");
+            }
+        }
         monitorFlutterWindows();
         return 1;
     }
@@ -73,9 +84,12 @@ namespace bitsdojo_window {
         window_can_be_shown = value;
     }
 
-    HWND getAppWindow()
-    {
+    HWND getAppWindow() {
         return flutter_window;
+    }
+
+    bool isDPIAware() {
+        return is_dpi_aware;
     }
 
     LRESULT CALLBACK main_window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR subclassID, DWORD_PTR refData);
@@ -223,11 +237,15 @@ namespace bitsdojo_window {
     }
 
     void adjustMaximizedSize(HWND window, WINDOWPOS* winPos) {
+        if (!winPos) {
+            return;
+        }
+
         auto screenRect = getWorkingScreenRectForWindow(window);
         if ((winPos->x < screenRect.left) &&
             (winPos->y < screenRect.top) &&
             (winPos->cx > (screenRect.right - screenRect.left))
-            && (winPos->cy > (screenRect.bottom - screenRect.top))) {            
+            && (winPos->cy > (screenRect.bottom - screenRect.top))) {
             winPos->x = screenRect.left;
             winPos->y = screenRect.top;
             winPos->cx = screenRect.right - screenRect.left;
@@ -257,8 +275,13 @@ namespace bitsdojo_window {
 
     LRESULT handle_nccalcsize(HWND window, WPARAM wparam, LPARAM lparam)
     {
+        if (!wparam)
+        {
+            return 0;
+        }
         auto params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
-        adjustMaximizedSize(window, params->lppos);
+        if (params->lppos)
+            adjustMaximizedSize(window, params->lppos);
         adjustMaximizedRects(window,params);
 
         auto initialRect = params->rgrc[0];
@@ -541,7 +564,7 @@ LRESULT CALLBACK main_window_proc(HWND window, UINT message, WPARAM wparam, LPAR
             info->ptMaxTrackSize.x = maxSize.cx;
             info->ptMaxTrackSize.y = maxSize.cy;
         }
-        return 0;
+        break;
     }
     case WM_ENTERSIZEMOVE:
     {
