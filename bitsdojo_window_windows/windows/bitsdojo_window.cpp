@@ -107,7 +107,11 @@ namespace bitsdojo_window {
             {
                 return 0;
             }
-            if (wcscmp(createParams->lpcs->lpszClass, L"FLUTTER_RUNNER_WIN32_WINDOW") == 0)
+            // Pancake Work registers a custom window class name in its runner
+            // (PANCAKE_WORK_WIN32_WINDOW). Match it as well as the default
+            // Flutter runner class so the main window is still subclassed.
+            if (wcscmp(createParams->lpcs->lpszClass, L"FLUTTER_RUNNER_WIN32_WINDOW") == 0 ||
+                wcscmp(createParams->lpcs->lpszClass, L"PANCAKE_WORK_WIN32_WINDOW") == 0)
             {
                 flutter_window = (HWND)wparam;
                 SetWindowSubclass(flutter_window, main_window_proc, 1, NULL);
